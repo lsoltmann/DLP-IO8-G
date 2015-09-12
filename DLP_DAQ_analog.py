@@ -13,7 +13,7 @@ import DLP_IO8_G as DAQ
 
 # Import the sample rate and active channels from the command line and make sure there are enough inputs
 if len(sys.argv)<3:
-    print("Usage: "+repr(sys.argv[0])+" sampleRate(Hz) activePort# activePort# ... etc")
+    print("Usage: "+sys.argv[0]+" sampleRate(Hz) activePort# activePort# ... etc")
     sys.exit(0)
 
 sampTime=1/int(sys.argv[1])
@@ -51,7 +51,7 @@ tstart=time.perf_counter()
 while True:
     t1=time.perf_counter()
     for i in range(2,len(sys.argv)):
-        print("Channel "+repr(int(sys.argv[i]))+": "+repr(DAQ.getVoltage(USB,int(sys.argv[i]))))
+        print("Channel "+sys.argv[i]+"(V): {0:.3f}".format(DAQ.getVoltage(USB,int(sys.argv[i]))))
     print(" ")
 
     # WRITE TO FILE HERE - currently just prints data to screen in real time
