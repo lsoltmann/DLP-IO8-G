@@ -1,20 +1,24 @@
-# DLP_IO8_G_py.py
-#        
-# Description: Python 3 module for communication with USB DLP-IO8-G DAQ module
-#            
-# Revision History
-# 11 Sep 2015 - Created and debugged
-# 15 Dec 2016 - Updated code to work on both Raspberry Pi and Mac
-#                    
-# Author: Lars Soltmann
-#                        
-# NOTE: - Settings allow user to switch between ASCII and binary output but functions rely on binary output (A=ASCII, B=binary)
-#       - Written for Python3
+'''
+DLP_IO8_G_py.py
 
+Description: Python 3 module for communication with USB DLP-IO8-G DAQ module
+
+Revision History
+11 Sep 2015 - Created and debugged
+15 Dec 2016 - Updated code to work on both Raspberry Pi and Mac
+08 Aug 2019 - Updated getVoltage and getDigitalInput functions to work in ASCII mode.
+              Functions originally only worked in binary mode.
+              Luke Paker (Parskofamily) provided the code to get the functions working
+              in ASCII mode.
+
+Author: Lars Soltmann
+
+'''
 
 
 import serial
 import sys
+import time
 
 
 class DLP:
@@ -99,7 +103,6 @@ class DLP:
             return 1
     
 
-
     def connect(self):
         print("Openning port... ", end='')
         ## Open connected device at specificed USB port
@@ -130,11 +133,14 @@ class DLP:
         ## Set the device to output ASCII or binary
         if A_or_B=='A':
             self.USB.write(bytes([self.DLP_CMDS[0][0]]))
+            self.OuputType = 'A'
         elif A_or_B=='B':
             self.USB.write(bytes([self.DLP_CMDS[1][0]]))
+            self.OuputType = 'B'
         else:
             print("Invalid input for returned output type ... using default ASCII output")
             self.USB.write(bytes([self.DLP_CMDS[0][0]]))
+            self.OuputType = 'A'
         ## Set the device to output degrees F or C
         if F_or_C=='F':
             self.USB.write(bytes([self.DLP_CMDS[2][0]]))
@@ -160,10 +166,24 @@ class DLP:
             print("Channel number (1-8) out of range")
             digitalInputValue=-1
         else:
-            self.USB.write(bytes([self.DLP_CMDS[2][ch_num]]))
-            [digitalInputValue]=self.USB.read(1)
+            # If device was setup in ASCII mode
+            if self.OuputType == 'A':
+                digitalInputValue = ''
+                self.USB.write(bytes([self.DLP_CMDS[2][ch_num]]))
+                time.sleep(0.03)
+                digitalInputValue = self.USB.read(self.USB.inWaiting())
+                if len(digitalInputValue) > 0:
+                    digitalInputValue = chr(digitalInputValue[0])
+                    digitalInputValue = int(digitalInputValue)
+                else:
+                    self.USB.reset_input_buffer()
+                    digitalInputValue = -1
+            # If device was setup in Binary mode
+            elif self.OuputType == 'B':
+                self.USB.write(bytes([self.DLP_CMDS[2][ch_num]]))
+                [digitalInputValue]=self.USB.read(1)
         return digitalInputValue
-
+    
 
     def getVoltage(self,ch_num):
         ## Read the analog value of the current channel
@@ -171,9 +191,26 @@ class DLP:
             print("Channel number (1-8) out of range")
             voltageValue=-1
         else:
-            self.USB.write(bytes([self.DLP_CMDS[3][ch_num]]))
-            voltageCount=self.USB.read(2)
-            voltageValue=(5/1023)*(voltageCount[1] + (voltageCount[0] << 8))
+            # If device was setup in ASCII mode
+            if self.OuputType == 'A':
+                self.USB.write(bytes([self.DLP_CMDS[3][ch_num]]))
+                time.sleep(0.03)
+                voltageValue = ''
+                voltageCount = self.USB.readline(self.USB.inWaiting())
+                if len(voltageCount) > 2:
+                    for item in range(len(voltageCount)-2):
+                        voltageValue += chr(voltageCount[item])
+                    voltageValue = float(voltageValue)
+                else:
+                    self.USB.reset_input_buffer()
+                    voltageValue=-1
+            # If device was setup in Binary mode
+            elif self.OuputType == 'B':
+                self.USB.write(bytes([self.DLP_CMDS[3][ch_num]]))
+                voltageCount=self.USB.read(2)
+                voltageValue=(5/1023)*(voltageCount[1] + (voltageCount[0] << 8))
+        # Apply calibration
+        voltageValue = voltageValue*self.voltageCal_scale+self.voltageCal_offset
         return voltageValue
 
 
@@ -188,6 +225,6 @@ class DLP:
             temperatureValue=(temperatureCount[1] + (temperatureCount[0] << 8))
         return temperatureValue
 
-
+    
     def disconnect(self):
         self.USB.close()
